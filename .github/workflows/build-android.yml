@@ -134,6 +134,9 @@ jobs:
           fi
 
       - name: 手动签名 APK
+        # 如果未配置签名密钥则跳过，允许构建继续
+        if: secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEYSTORE_PASSWORD != ''
+        continue-on-error: true
         run: |
           VERSION="${{ github.event.inputs.tag_name }}"
           APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/LingChat-${VERSION}-universal.apk"
