@@ -2,6 +2,8 @@
 //!
 //! 插件的列表、启停、配置保存。业务逻辑在 `plugins::PluginManager`。
 
+#![cfg(desktop)]
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

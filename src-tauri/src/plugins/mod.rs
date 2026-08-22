@@ -11,9 +11,12 @@
 //! - [`PluginInfo`](types::PluginInfo)：暴露给前端的插件信息
 //! - [`manifest::parse`](manifest::parse)：解析并校验 manifest.toml
 
+// RustPython 运行时仅桌面端可用（安卓/iOS 无 rustpython_vm 依赖）
+#[cfg(desktop)]
 pub mod http_host;
 pub mod manager;
 pub mod manifest;
+#[cfg(desktop)]
 pub mod python_backend;
 pub mod tool;
 pub mod types;
