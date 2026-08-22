@@ -77,7 +77,7 @@ impl Tool for PluginTool {
         .map_err(|join_err| ToolError::Execution(format!("插件线程异常: {join_err}")))?;
 
         #[cfg(not(desktop))]
-        let result = Err(ToolError::Execution("插件系统仅桌面端可用".to_string()));
+        return Err(ToolError::Execution("插件系统仅桌面端可用".to_string()));
 
         match result {
             Ok(value) => Ok(value),
