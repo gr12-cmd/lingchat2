@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 use crate::ai_service::tools::registry::ToolRegistry;
 
 use super::manifest;
+#[cfg(desktop)]
 use super::python_backend;
 use super::tool::PluginTool;
 use super::types::{ConfigKind, PluginInfo, PluginRecord, PluginState};
@@ -176,7 +177,10 @@ impl PluginManager {
             return (HashMap::new(), HashMap::new());
         };
         let config = record.state.config.clone();
+        #[cfg(desktop)]
         let env = python_backend::collect_env(&record.manifest);
+        #[cfg(not(desktop))]
+        let env = HashMap::new();
         (config, env)
     }
 

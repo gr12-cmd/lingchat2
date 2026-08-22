@@ -10,6 +10,7 @@ use crate::ai_service::tools::executor::{Tool, ToolContext, ToolError, ToolResul
 use crate::ai_service::types::ToolDefinition;
 use crate::AppState;
 
+#[cfg(desktop)]
 use super::python_backend;
 use super::types::ToolSpec;
 
@@ -62,6 +63,7 @@ impl Tool for PluginTool {
         // 取 config/env、解析脚本路径、跑 Python 都是阻塞操作（PluginManager 内部
         // 用 blocking_lock，RustPython 需要线程局部状态），整体放 spawn_blocking；
         // 外层 timeout_hint 兜底。app 随闭包传入，供脚本内 call_tool 使用。
+        #[cfg(desktop)]
         let result = tokio::task::spawn_blocking(move || {
             let manager = app.state::<AppState>().data().plugin_manager.clone();
             let (config, env) = manager.plugin_run_env(&plugin_id);
@@ -73,6 +75,9 @@ impl Tool for PluginTool {
         })
         .await
         .map_err(|join_err| ToolError::Execution(format!("插件线程异常: {join_err}")))?;
+
+        #[cfg(not(desktop))]
+        let result = Err(ToolError::Execution("插件系统仅桌面端可用".to_string()));
 
         match result {
             Ok(value) => Ok(value),
