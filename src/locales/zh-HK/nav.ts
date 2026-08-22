@@ -10,5 +10,6 @@ export default {
   "save": "存檔",
   "advance": "進階設定",
   "log": "日誌",
-  "plugins": "插件"
+  "plugins": "插件",
+  "data": "數據管理"
 }

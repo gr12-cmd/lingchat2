@@ -115,6 +115,16 @@
         <p class="hidden xl:block whitespace-nowrap">{{ $t('nav.log') }}</p>
       </Button>
       <Button
+        ref="dataBtn"
+        type="nav"
+        class="shrink-0"
+        icon="database"
+        @click="() => switchTab('data', 'dataBtn')"
+        :class="{ active: uiStore.currentSettingsTab === 'data' }"
+      >
+        <p class="hidden xl:block whitespace-nowrap">{{ $t('nav.data') }}</p>
+      </Button>
+      <Button
         v-if="!isAndroid()"
         ref="pluginsBtn"
         type="nav"
@@ -168,6 +178,7 @@ const advanceBtn = ref<ButtonRef | null>(null)
 const updateBtn = ref<ButtonRef | null>(null)
 const adventureBtn = ref<ButtonRef | null>(null)
 const logBtn = ref<ButtonRef | null>(null)
+const dataBtn = ref<ButtonRef | null>(null)
 const pluginsBtn = ref<ButtonRef | null>(null)
 
 // 设置可重设的值（使用 ref 存储，确保响应式或跨函数访问）
@@ -188,6 +199,7 @@ const handleIndicatorMove = (currentRefName: string) => {
     updateBtn,
     adventureBtn,
     logBtn,
+    dataBtn,
     pluginsBtn,
   }[currentRefName]
 
@@ -284,6 +296,9 @@ const initIndicator = () => {
       break
     case 'log':
       activeButton = logBtn.value
+      break
+    case 'data':
+      activeButton = dataBtn.value
       break
     case 'plugins':
       activeButton = pluginsBtn.value
