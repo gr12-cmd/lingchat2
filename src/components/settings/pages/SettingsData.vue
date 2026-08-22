@@ -173,7 +173,7 @@ import {
 import { open as openDialog, save as saveDialog } from '@tauri-apps/plugin-dialog'
 import { Button } from '../../base'
 import { MenuItem, MenuPage } from '../../ui'
-import { useSettingsStore } from '../../stores/modules/settings'
+import { useSettingsStore } from '../../../stores/modules/settings'
 import {
   ALL_SELECTIONS,
   exportDataBackup,

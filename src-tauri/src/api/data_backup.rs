@@ -283,7 +283,6 @@ pub async fn import_data_backup(
     let manifest: BackupManifest =
         serde_json::from_str(&manifest_json).map_err(|e| format!("解析 manifest: {e}"))?;
 
-    let data_dir = crate::api::data_dir();
     let game_data_dir = game_data_dir();
     let mut result = ImportResult {
         frontend_preferences_json: None,
