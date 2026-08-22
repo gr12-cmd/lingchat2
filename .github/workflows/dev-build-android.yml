@@ -102,6 +102,7 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: 配置 Android 签名
+        if: secrets.ANDROID_KEY_BASE64 != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEYSTORE_PASSWORD != ''
         run: |
           echo "${{ secrets.ANDROID_KEY_BASE64 }}" | base64 -d > $HOME/upload-keystore.p12
           cat > src-tauri/gen/android/keystore.properties << EOF
@@ -114,6 +115,9 @@ jobs:
         run: pnpm android:build
 
       - name: 手动签名 APK
+        # 如果未配置签名密钥则跳过，允许构建继续
+        if: secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEYSTORE_PASSWORD != ''
+        continue-on-error: true
         run: |
           VERSION="${{ github.event.inputs.tag_name }}"
           APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
