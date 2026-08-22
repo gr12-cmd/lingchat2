@@ -361,7 +361,7 @@ pub async fn import_data_backup(
 /// 读取 Tauri settings store 的全部键值，序列化为 JSON 对象。
 fn export_settings_to_map(app: &AppHandle) -> Result<serde_json::Value, String> {
     let store = config::settings_store(app).map_err(|e| e.to_string())?;
-    let keys = store.keys().map_err(|e| format!("读取配置键失败: {e}"))?;
+    let keys = store.keys();
     let mut map = serde_json::Map::new();
     for key in keys {
         if let Some(value) = store.get(&key) {
