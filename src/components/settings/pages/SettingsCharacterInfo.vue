@@ -129,6 +129,57 @@
                 :offset-y="Number(localSettings.offset_y) || 0"
               />
 
+              <!-- GSV 六情绪参考语音（tts_type=gsv 时显示） -->
+              <div
+                v-if="activeTab === 'voice' && localSettings.tts_type === 'gsv'"
+                class="space-y-4"
+              >
+                <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
+                  <div>
+                    <h3 class="text-sm font-bold text-white/70">GSV 情绪参考语音</h3>
+                    <p class="text-xs text-white/40 mt-1">
+                      开启后按情绪分类（吃惊/开心/恐惧/难过/生气/中立）实时切换参考语音与文本；关闭时使用上面的 gsv_voice_filename / gsv_voice_text。
+                    </p>
+                  </div>
+                  <button
+                    role="switch"
+                    :aria-checked="gsvEmoEnabled"
+                    class="px-3.5 py-1.5 rounded-lg border-none text-xs cursor-pointer transition-colors"
+                    :class="gsvEmoEnabled ? 'bg-[#5e72e4] text-white hover:bg-[#4a5acf]' : 'bg-white/10 text-white/60 hover:bg-white/20'"
+                    @click="toggleGsvEmo"
+                  >
+                    {{ gsvEmoEnabled ? '已开启' : '已关闭' }}
+                  </button>
+                </div>
+
+                <div v-if="gsvEmoEnabled" class="space-y-3">
+                  <div
+                    v-for="cat in GSV_EMO_CATEGORIES"
+                    :key="cat"
+                    class="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 bg-white/5 rounded-xl border border-white/10"
+                  >
+                    <div class="flex flex-col gap-2">
+                      <label class="text-[13px] text-white/60 font-medium">{{ cat }} · 参考语音文件</label>
+                      <input
+                        v-model="gsvEmoVoiceFileModel(cat).value"
+                        type="text"
+                        placeholder="如 开心.wav；留空自动找 voice/开心.*"
+                        class="form-control bg-black/20 border border-white/10 rounded-xl px-3.5 py-2.5 text-white text-sm outline-none transition-all duration-200"
+                      />
+                    </div>
+                    <div class="flex flex-col gap-2">
+                      <label class="text-[13px] text-white/60 font-medium">{{ cat }} · 参考文本</label>
+                      <input
+                        v-model="gsvEmoTextModel(cat).value"
+                        type="text"
+                        placeholder="参考音频对应的文本内容"
+                        class="form-control bg-black/20 border border-white/10 rounded-xl px-3.5 py-2.5 text-white text-sm outline-none transition-all duration-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <!-- Clothes Tab (custom UI, outside data-driven block) -->
               <div v-if="activeTab === 'clothes'" class="space-y-4">
                 <div class="flex items-center justify-between">
@@ -538,7 +589,8 @@ const schemas = computed<Record<string, FieldSchema[]>>(() => ({
       type: 'text',
       isVoiceModel: true,
       realtime: true,
-      visibleIf: (s) => s.tts_type === 'gsv',
+      // 六情绪开关开启后由分类参考文本接管，隐藏旧的单一参考文本
+      visibleIf: (s) => s.tts_type === 'gsv' && !s.voice_models?.gsv_emo_enabled,
     },
     {
       key: 'gsv_voice_filename',
@@ -546,7 +598,7 @@ const schemas = computed<Record<string, FieldSchema[]>>(() => ({
       type: 'text',
       isVoiceModel: true,
       realtime: true,
-      visibleIf: (s) => s.tts_type === 'gsv',
+      visibleIf: (s) => s.tts_type === 'gsv' && !s.voice_models?.gsv_emo_enabled,
     },
     {
       key: 'gsv_gpt_model_name',
@@ -703,6 +755,57 @@ const migrateLegacyVoiceModelFields = () => {
   }
 }
 
+// --- GSV 六情绪参考语音（自定义 UI，复用立绘系统的分类思路） ---
+
+const GSV_EMO_CATEGORIES = ['吃惊', '开心', '恐惧', '难过', '生气', '中立'] as const
+
+const gsvEmoEnabled = computed({
+  get: () => Boolean(localSettings.value.voice_models?.gsv_emo_enabled),
+  set: (val: boolean) => {
+    ensureVoiceModels()
+    ;(localSettings.value.voice_models as Record<string, unknown>).gsv_emo_enabled = val
+  },
+})
+
+const toggleGsvEmo = () => {
+  gsvEmoEnabled.value = !gsvEmoEnabled.value
+  handleGsvEmoChange()
+}
+
+const gsvEmoTextModel = (cat: string) =>
+  computed({
+    get: () => {
+      const vm = ensureVoiceModels()
+      const map = (vm.gsv_emo_texts as Record<string, string> | undefined) ?? {}
+      return map[cat] ?? ''
+    },
+    set: (val: string) => {
+      const vm = ensureVoiceModels()
+      if (!vm.gsv_emo_texts || typeof vm.gsv_emo_texts !== 'object') {
+        vm.gsv_emo_texts = {}
+      }
+      ;(vm.gsv_emo_texts as Record<string, string>)[cat] = val
+      handleGsvEmoChange()
+    },
+  })
+
+const gsvEmoVoiceFileModel = (cat: string) =>
+  computed({
+    get: () => {
+      const vm = ensureVoiceModels()
+      const map = (vm.gsv_emo_voice_files as Record<string, string> | undefined) ?? {}
+      return map[cat] ?? ''
+    },
+    set: (val: string) => {
+      const vm = ensureVoiceModels()
+      if (!vm.gsv_emo_voice_files || typeof vm.gsv_emo_voice_files !== 'object') {
+        vm.gsv_emo_voice_files = {}
+      }
+      ;(vm.gsv_emo_voice_files as Record<string, string>)[cat] = val
+      handleGsvEmoChange()
+    },
+  })
+
 const fieldModel = (field: FieldSchema) => {
   return computed({
     get: () => {
@@ -829,6 +932,24 @@ const handleFieldChange = (field: FieldSchema) => {
       console.error(`实时更新 ${field.key} 失败:`, e)
       // 使用国际化
       await dialogStore.alert(t('settings.characterInfo.messages.realtimeUpdateFailed', { label: field.label }))
+    }
+  }, REALTIME_SAVE_DEBOUNCE_MS)
+}
+
+// GSV 六情绪参考的实时保存（与 handleFieldChange 共用防抖机制）
+const handleGsvEmoChange = () => {
+  if (!props.roleId) return
+
+  const roleId = props.roleId
+  clearRealtimeSaveTimer()
+  realtimeSaveTimer = setTimeout(async () => {
+    realtimeSaveTimer = null
+    if (!props.visible || props.roleId !== roleId) return
+    try {
+      await updateRoleSettings(roleId, localSettings.value)
+    } catch (e) {
+      console.error('实时更新 GSV 情绪参考失败:', e)
+      await dialogStore.alert(t('settings.characterInfo.messages.realtimeUpdateFailed', { label: 'gsv_emo' }))
     }
   }, REALTIME_SAVE_DEBOUNCE_MS)
 }
