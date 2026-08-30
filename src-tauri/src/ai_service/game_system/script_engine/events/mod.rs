@@ -11,17 +11,30 @@ pub mod ambient_event;
 pub mod background_effect_event;
 pub mod background_event;
 pub mod chapter_end_event;
+pub mod character_file_event;
 pub mod choice_event;
+pub mod console_window_event;
 pub mod dialog_event;
+pub mod force_choice_event;
 pub mod free_dialogue_event;
+pub mod glitch_window_event;
+pub mod horror_log_event;
 pub mod input_event;
+pub mod jumpscare_event;
+pub mod menu_effect_event;
 pub mod modify_character_event;
 pub mod music_event;
 pub mod narration_event;
 pub mod player_event;
+pub mod poem_game_event;
 pub mod present_pic_event;
+pub mod random_var_event;
 pub mod set_variable_event;
 pub mod sound_event;
+pub mod voice_shift_event;
+pub mod wait_event;
+pub mod watch_file_event;
+pub mod window_title_event;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -42,17 +55,42 @@ use crate::ai_service::llm::LlmClient;
 // 剧本共享通道（剧本运行期间的用户输入/选择）
 // ============================================================
 
+/// 当前 `force_choice` 的一次性能力票据：只允许对应主窗口在短时间内移动鼠标，
+/// 提交时后端还会强制核对 forced 文本，不能只依赖前端 disabled。
+#[derive(Clone, Debug)]
+pub struct ForceChoiceGuard {
+    pub request_id: String,
+    pub forced: String,
+    pub warp_enabled: bool,
+    pub warp_expires_at: std::time::Instant,
+}
+
+/// 绑定一次写诗互动的独立提交通道。
+pub struct PoemSubmissionChannel {
+    pub request_id: String,
+    pub tx: tokio::sync::oneshot::Sender<String>,
+}
+
 /// 剧本运行期间用于用户输入/选择的通道。
 /// 存为 `Arc<Mutex<>>`，使后台任务与 Tauri 命令都能访问，而不必持有 `AIService` 的锁。
 pub struct ScriptChannels {
     pub input_tx: Option<tokio::sync::oneshot::Sender<String>>,
     pub choice_tx: Option<tokio::sync::oneshot::Sender<String>>,
+    /// 写诗小游戏独立通道，不能与普通/强制 choice 互相消费。
+    pub poem_tx: Option<PoemSubmissionChannel>,
     /// 当前挂起的 `choices` 事件是否接受自由输入文本。
     ///
     /// 镜像正在执行的 [`choice_event::ChoiceEvent`] 的 `allow_free` 字段。
     /// `script_submit_input` 据此判断：当选项挂起时，输入框里打的字可以转投
     /// `choice_tx` 而不是被拒绝——否则选项永远无法解决，剧本永久阻塞。
     pub choice_allow_free: bool,
+    pub force_choice_guard: Option<ForceChoiceGuard>,
+    /// 文件监视（watch_file）：目标 .chr 消失时要跳转的章节。
+    /// 章节循环在事件之间/事件报错时检查它——监视器会同时丢弃挂起的输入通道，
+    /// 让阻塞中的事件立刻以 Err 返回，从而及时让位给目标章节。
+    pub watch_jump: Option<String>,
+    /// 监视任务句柄；新监视/停止/剧本结束时 abort。
+    pub watch_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl ScriptChannels {
@@ -60,7 +98,11 @@ impl ScriptChannels {
         Self {
             input_tx: None,
             choice_tx: None,
+            poem_tx: None,
             choice_allow_free: false,
+            force_choice_guard: None,
+            watch_jump: None,
+            watch_task: None,
         }
     }
 }
@@ -92,6 +134,10 @@ pub struct ScriptContext<'a> {
     /// 标记，前端据此丢弃中止后迟到的流式回复（见 `ReplyResponse.preview_gen`）。
     /// 正式游玩显式置 `false`。
     pub is_preview: bool,
+
+    /// Auxiliary-window epoch captured when this exact script run starts.
+    /// Teardown advances the global epoch, so late events from an old task are rejected.
+    pub glitch_window_generation: u64,
 }
 
 // ============================================================
@@ -170,19 +216,60 @@ pub fn parse_duration(data: &Value) -> Option<f64> {
 /// 未定义变量视为「不持有任何值」，于是对任意 `v`，`x == v` 为假、`x != v` 为真。
 /// 两者相互自洽——不要只改其中一个而不改另一个。
 ///
-/// # 不支持的写法
+/// # 支持的组合
 ///
-/// `>`、`<`、`>=`、`<=`、`&&`、`||`、`!`、括号、算术运算**均未实现**。
-/// `hp >= 5` 不会做任何比较：它会落到裸变量分支，去查一个字面名为 `"hp >= 5"`
-/// 的变量，该变量永远不存在，故条件恒为假。
+/// 支持 `&&`、`||`（`&&` 优先级更高）以及数字的 `>` / `<` / `>=` / `<=`。
+/// 仍不解析括号、任意算术表达式或字符串排序；复杂逻辑应拆成多个章节门。
+pub(crate) fn split_once_unquoted<'a>(
+    input: &'a str,
+    operator: &str,
+) -> Option<(&'a str, &'a str)> {
+    let mut quote = None;
+    let mut escaped = false;
+    for (index, character) in input.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if character == '\\' {
+            escaped = true;
+            continue;
+        }
+        if let Some(active_quote) = quote {
+            if character == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+        if matches!(character, '\'' | '"') {
+            quote = Some(character);
+            continue;
+        }
+        if input[index..].starts_with(operator) {
+            let right = index + operator.len();
+            return Some((&input[..index], &input[right..]));
+        }
+    }
+    None
+}
+
 pub fn evaluate_condition(condition: &str, vars: &serde_json::Map<String, Value>) -> bool {
     let condition = condition.trim();
     if condition.is_empty() {
         return true;
     }
 
+    // 最低优先级：OR；随后是 AND。逻辑符必须两侧留空格；无空格的
+    // `a||b` / `a&&b` 继续作为旧剧本的普通字符串值参与 == / != 比较。
+    if let Some((left, right)) = split_once_unquoted(condition, " || ") {
+        return evaluate_condition(left, vars) || evaluate_condition(right, vars);
+    }
+    if let Some((left, right)) = split_once_unquoted(condition, " && ") {
+        return evaluate_condition(left, vars) && evaluate_condition(right, vars);
+    }
+
     // 先试 `!=`（更长的模式，优先匹配）
-    if let Some((var, val)) = condition.split_once("!=") {
+    if let Some((var, val)) = split_once_unquoted(condition, "!=") {
         let var = var.trim();
         let val = val.trim().trim_matches('"').trim_matches('\'');
         if let Some(current) = vars.get(var) {
@@ -198,7 +285,7 @@ pub fn evaluate_condition(condition: &str, vars: &serde_json::Map<String, Value>
     }
 
     // 再试 `==`
-    if let Some((var, val)) = condition.split_once("==") {
+    if let Some((var, val)) = split_once_unquoted(condition, "==") {
         let var = var.trim();
         let val = val.trim().trim_matches('"').trim_matches('\'');
         if let Some(current) = vars.get(var) {
@@ -211,6 +298,26 @@ pub fn evaluate_condition(condition: &str, vars: &serde_json::Map<String, Value>
         return false;
     }
 
+    // 数字比较。长操作符必须先于短操作符匹配；放在等值比较之后，
+    // 避免字符串值本身含有 `<` / `>` 时改变旧有 `==` / `!=` 语义。
+    for operator in [">=", "<=", ">", "<"] {
+        if let Some((var, raw_value)) = split_once_unquoted(condition, operator) {
+            let Some(current) = vars.get(var.trim()).and_then(Value::as_f64) else {
+                return false;
+            };
+            let Ok(expected) = raw_value.trim().parse::<f64>() else {
+                return false;
+            };
+            return match operator {
+                ">=" => current >= expected,
+                "<=" => current <= expected,
+                ">" => current > expected,
+                "<" => current < expected,
+                _ => unreachable!(),
+            };
+        }
+    }
+
     // 默认：当作布尔变量查找
     if let Some(current) = vars.get(condition) {
         match current {
@@ -220,5 +327,93 @@ pub fn evaluate_condition(condition: &str, vars: &serde_json::Map<String, Value>
         }
     } else {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::evaluate_condition;
+    use serde_json::{Map, Value, json};
+
+    fn vars(pairs: &[(&str, Value)]) -> Map<String, Value> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn empty_condition_always_passes() {
+        assert!(evaluate_condition("", &Map::new()));
+        assert!(evaluate_condition("   ", &Map::new()));
+    }
+
+    #[test]
+    fn equality_compares_string_form() {
+        let v = vars(&[
+            ("flag", json!(true)),
+            ("name", json!("钦灵")),
+            ("count", json!(2)),
+        ]);
+        assert!(evaluate_condition("flag == true", &v));
+        assert!(evaluate_condition("name == 钦灵", &v));
+        assert!(evaluate_condition("name == \"钦灵\"", &v));
+        assert!(evaluate_condition("count == 2", &v));
+        assert!(!evaluate_condition("count == 3", &v));
+    }
+
+    #[test]
+    fn inequality_is_the_complement_of_equality() {
+        let v = vars(&[("route", json!("shop"))]);
+        assert!(evaluate_condition("route != home", &v));
+        assert!(!evaluate_condition("route != shop", &v));
+    }
+
+    /// Undefined variables must behave consistently across `==` and `!=`.
+    /// Regression guard for the contradictory comment removed in PR1.
+    #[test]
+    fn undefined_variable_is_unequal_to_everything() {
+        let v = Map::new();
+        assert!(!evaluate_condition("missing == 1", &v));
+        assert!(evaluate_condition("missing != 1", &v));
+        assert!(!evaluate_condition("missing", &v));
+    }
+
+    #[test]
+    fn bare_variable_is_a_truthiness_check() {
+        let v = vars(&[
+            ("t", json!(true)),
+            ("f", json!(false)),
+            ("n", Value::Null),
+            ("s", json!("x")),
+            ("zero", json!(0)),
+        ]);
+        assert!(evaluate_condition("t", &v));
+        assert!(!evaluate_condition("f", &v));
+        assert!(!evaluate_condition("n", &v));
+        assert!(evaluate_condition("s", &v));
+        // 说明：0 属于「非空、非布尔」，因此为真。这是有意为之。
+        assert!(evaluate_condition("zero", &v));
+    }
+
+    #[test]
+    fn supports_numeric_comparisons_and_boolean_composition() {
+        let v = vars(&[
+            ("hp", json!(10)),
+            ("act", json!(4)),
+            ("done", json!(true)),
+            ("label", json!("a>b")),
+            ("pipes", json!("a||b&&c")),
+        ]);
+        assert!(evaluate_condition("hp >= 5", &v));
+        assert!(evaluate_condition("hp > 5", &v));
+        assert!(evaluate_condition("hp <= 10", &v));
+        assert!(!evaluate_condition("hp < 10", &v));
+        assert!(evaluate_condition("act == 4 && done == true", &v));
+        assert!(evaluate_condition("act == 3 || done == true", &v));
+        assert!(!evaluate_condition("act == 3 || hp < 2", &v));
+        assert!(evaluate_condition("label == a>b", &v));
+        assert!(evaluate_condition("pipes == \"a||b&&c\"", &v));
+        assert!(evaluate_condition("pipes == a||b&&c", &v));
     }
 }

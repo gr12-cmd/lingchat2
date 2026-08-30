@@ -12,6 +12,8 @@
   <AchievementToast v-if="isMainWindow" />
   <AdventureUnlockNotify v-if="isMainWindow" />
   <AppDialog v-if="isMainWindow" />
+  <HorrorEntryTransition v-if="isMainWindow" />
+  <GhostScriptLock v-if="isMainWindow" />
 </template>
 
 <script setup lang="ts">
@@ -25,7 +27,9 @@ import Notification from './components/ui/Notification.vue'
 import AchievementToast from './components/ui/AchievementToast.vue'
 import AdventureUnlockNotify from './components/ui/AdventureUnlockNotify.vue'
 import AppDialog from './components/ui/AppDialog.vue'
-import { initUIStore } from './stores/modules/ui/ui'
+import HorrorEntryTransition from './components/ui/HorrorEntryTransition.vue'
+import GhostScriptLock from './components/ui/GhostScriptLock.vue'
+import { initUIStore, useUIStore } from './stores/modules/ui/ui'
 import { i18n } from './locales'
 import { useSettingsStore } from './stores/modules/settings'
 import { useLlmProvidersStore } from './stores/modules/llm-providers'
@@ -216,6 +220,7 @@ const handleKeyDown = async (event: KeyboardEvent) => {
 // ─── 关闭确认 ────────────────────────────────────────────────
 
 const dialogStore = useDialogStore()
+const uiStore = useUIStore()
 let saveCompleted = false
 let userConfirmedExit = false
 let unlistenCloseReady: (() => void) | null = null
@@ -310,6 +315,18 @@ onMounted(async () => {
       // 重置状态
       saveCompleted = false
       userConfirmedExit = false
+
+      // 幽灵锁定（删角色文件彩蛋）中点 X：不弹确认——DDLC quit 式放大脸突脸。
+      // userConfirmedExit 只在 620ms 后才置位：存档若秒完也不能提前退出，
+      // 保证 0.42s 放大动画播完并定格 200ms（存档慢时则由 app:close-ready 汇合退出）
+      if (uiStore.ghostLock) {
+        uiStore.triggerGhostQuitZoom()
+        window.setTimeout(() => {
+          userConfirmedExit = true
+          tryExit()
+        }, 620)
+        return
+      }
 
       if (route.path === '/chat') {
         const confirmed = await dialogStore.confirm(
