@@ -39,6 +39,7 @@ import {
   SettingsAchievement,
   SettingsAdventure,
   SettingsLog,
+  SettingsData,
   SettingsPlugins,
 } from './pages'
 import SettingsNav from './SettingsNav.vue'
@@ -90,6 +91,7 @@ const TABS = [
   'save',
   'advance',
   'log',
+  'data',
   // 插件系统由 RustPython 驱动，移动端不编译（cfg(desktop)），Android 上不显示该 tab
   ...(isAndroid() ? [] : ['plugins']),
 ] as const
@@ -106,6 +108,7 @@ const tabComponents: Record<string, Component> = {
   character: SettingsCharacter,
   background: SettingsBackground,
   log: SettingsLog,
+  data: SettingsData,
   plugins: SettingsPlugins,
 }
 const currentTabComponent = computed(() => tabComponents[uiStore.currentSettingsTab])

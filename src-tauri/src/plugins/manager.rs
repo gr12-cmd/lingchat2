@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 use crate::ai_service::tools::registry::ToolRegistry;
 
 use super::manifest;
+#[cfg(desktop)]
 use super::python_backend;
 use super::tool::PluginTool;
 use super::types::{ConfigKind, PluginInfo, PluginRecord, PluginState};
@@ -176,30 +177,11 @@ impl PluginManager {
             return (HashMap::new(), HashMap::new());
         };
         let config = record.state.config.clone();
+        #[cfg(desktop)]
         let env = python_backend::collect_env(&record.manifest);
+        #[cfg(not(desktop))]
+        let env = HashMap::new();
         (config, env)
-    }
-
-    /// 获取插件 manifest 声明的运行时权限：网络白名单 + call_tool 声明工具。
-    ///
-    /// 在 `spawn_blocking` 线程内调用，`blocking_lock` 等待锁安全。
-    pub fn plugin_decls(
-        &self,
-        id: &str,
-    ) -> (Vec<super::types::NetworkDecl>, Vec<String>) {
-        let records = self.records.blocking_lock();
-        let Some(record) = records.get(id) else {
-            return (Vec::new(), Vec::new());
-        };
-        let network = record.manifest.network.clone();
-        let declared_tools = record
-            .manifest
-            .permissions
-            .tools
-            .iter()
-            .map(|t| t.name.clone())
-            .collect();
-        (network, declared_tools)
     }
 
     /// 列表（供前端）。

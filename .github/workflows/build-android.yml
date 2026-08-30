@@ -27,7 +27,7 @@ jobs:
 
     env:
       CARGO_PROFILE_RELEASE_OPT_LEVEL: "s"
-      CARGO_PROFILE_RELEASE_STRIP: "true"
+      CARGO_PROFILE_RELEASE_STRIP: "false"
 
     steps:
       - uses: actions/checkout@v4
@@ -134,6 +134,8 @@ jobs:
           fi
 
       - name: 手动签名 APK
+        # 如果未配置签名密钥则失败，但不阻塞构建
+        continue-on-error: true
         run: |
           VERSION="${{ github.event.inputs.tag_name }}"
           APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/LingChat-${VERSION}-universal.apk"

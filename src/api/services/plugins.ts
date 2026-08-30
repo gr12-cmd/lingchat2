@@ -15,21 +15,6 @@ export interface EnvDecl {
   label: string
 }
 
-/** manifest [[network]] 白名单声明 */
-export interface NetworkDecl {
-  host: string
-  paths?: string[]
-  https_only: boolean
-}
-
-/** manifest [[assets]] 大文件声明 */
-export interface AssetDecl {
-  name: string
-  url: string
-  sha256: string
-  size: number
-}
-
 export interface PluginInfo {
   id: string
   name: string
@@ -40,9 +25,6 @@ export interface PluginInfo {
   config_schema: ConfigFieldDecl[]
   env: EnvDecl[]
   tools: string[]
-  network: NetworkDecl[]
-  declared_tools: string[]
-  assets: AssetDecl[]
   error?: string | null
 }
 

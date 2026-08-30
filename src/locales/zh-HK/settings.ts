@@ -1039,4 +1039,45 @@ export default {
       "switchDisabled": "本地 TTS 已關閉，如需使用雲端 TTS，請將角色語音切換為「雲端」並重新啟動應用程式。",
       "saveSwitchFailed": "儲存本地 TTS 開關失敗：{error}"
     }
-  },}
+  },
+  "data": {
+    "export": {
+      "title": "匯出數據",
+      "hint": "選擇要包含在備份入面嘅項目，然後匯出成一個 ZIP 檔案。",
+      "button": "開始匯出"
+    },
+    "import": {
+      "title": "匯入備份",
+      "hint": "選擇一個之前匯出嘅 ZIP 備份檔案，然後選擇要恢復嘅項目。",
+      "pickFile": "選擇備份檔案",
+      "appVersion": "應用程式版本",
+      "exportedAt": "匯出時間",
+      "selectItems": "選擇要恢復嘅項目",
+      "button": "開始匯入"
+    },
+    "items": {
+      "database": "資料庫（角色/存檔/對話記錄/記憶）",
+      "settings": "Tauri 配置（LLM/工具/應用程式設定）",
+      "frontendPreferences": "前端偏好（文字/音訊/顯示/快捷鍵）",
+      "characters": "角色檔案",
+      "backgrounds": "背景圖片",
+      "musics": "音樂",
+      "ambients": "環境音"
+    },
+    "selectAll": "全選",
+    "deselectAll": "全不選",
+    "exporting": "匯出緊...",
+    "exportRunning": "正在打包數據...",
+    "exportSuccess": "匯出成功",
+    "exportFailed": "匯出失敗",
+    "importing": "匯入緊...",
+    "importRunning": "正在恢復數據...",
+    "importSuccess": "匯入成功",
+    "importFailed": "匯入失敗",
+    "preparingExport": "正在準備...",
+    "cancelled": "已取消",
+    "restartHint": "已恢復資料庫或設置，請重啟應用以載入新數據。",
+    "restartNow": "立即重啟",
+    "restartLater": "稍後"
+  },
+}
