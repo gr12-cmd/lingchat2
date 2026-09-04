@@ -97,10 +97,7 @@ jobs:
       - name: pnpm 安装依赖
         run: pnpm i --frozen-lockfile
 
-      - name: 生成图标
-        run: |
-          git lfs pull src-tauri/icons/icon.png
-          pnpm run init
+
 
       - name: 准备 Android 项目
         run: pnpm android:prepare
