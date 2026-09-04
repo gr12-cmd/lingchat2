@@ -120,7 +120,7 @@ jobs:
 
       - name: 构建 Android armv7 APK
         run: |
-          pnpm tauri android build --target armv7-linux-androideabi
+          pnpm tauri android build --target armv7
 
       - name: 重命名并上传 APK
         run: |
