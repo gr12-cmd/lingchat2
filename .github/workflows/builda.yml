@@ -97,7 +97,7 @@ jobs:
         run: pnpm i --frozen-lockfile
 
       - name: 准备 Android 项目
-        run: pnpm android:prepare
+        run: pnpm tauri android init
 
       - name: 缓存 Gradle
         uses: actions/cache@v4
