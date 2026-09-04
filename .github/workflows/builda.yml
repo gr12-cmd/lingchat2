@@ -43,8 +43,7 @@ jobs:
           node-version: 24
           cache: 'pnpm'
 
-      - name: 签出 lfs 文件
-        run: git lfs pull
+
 
       - name: 安装 Rust（含 armv7 目标）
         uses: dtolnay/rust-toolchain@stable
