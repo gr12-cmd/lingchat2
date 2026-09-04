@@ -1,0 +1,216 @@
+name: 安卓 armv7l 发行版构建
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag 名称'
+        required: true
+        type: string
+        default: 'v0.0.0'
+      release_title:
+        description: 'Release 标题（仅新建时生效）'
+        required: false
+        type: string
+        default: 'armv7l 开发版构建'
+      is_prerelease:
+        description: '是否标记为预发布版本（仅新建时生效）'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: "s"
+      CARGO_PROFILE_RELEASE_STRIP: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: 签出 lfs 文件
+        run: git lfs pull
+
+      - name: 安装 Rust（含 armv7 目标）
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-linux-androideabi
+
+      - name: 设置 Rust 缓存
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri
+          cache-targets: true
+          shared-key: ${{ runner.os }}-release-pnpm-tauri-build-android-armv7
+          cache-on-failure: true
+
+      - name: 安装 Linux 依赖 (Ubuntu)
+        run: |
+          sudo apt-get update
+          sudo apt-get install eatmydata
+          sudo eatmydata apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libpipewire-0.3-dev \
+            libspa-0.2-dev \
+            libgbm-dev \
+            libegl1-mesa-dev \
+            libx11-dev \
+            libxcb1-dev \
+            libxrandr-dev \
+            libxcomposite-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxtst-dev \
+            libwayland-dev \
+            libdbus-1-dev \
+            zip
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: pnpm 安装依赖
+        run: pnpm i --frozen-lockfile
+
+      - name: 生成图标
+        run: |
+          git lfs pull src-tauri/icons/icon.png
+          pnpm run init
+
+      - name: 准备 Android 项目
+        run: pnpm android:prepare
+
+      - name: 缓存 Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/**/gradle-wrapper.properties', 'src-tauri/gen/android/gradle/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: 配置 Android 签名
+        run: |
+          echo "${{ secrets.ANDROID_KEY_BASE64 }}" | base64 -d > $HOME/upload-keystore.p12
+          cat > src-tauri/gen/android/keystore.properties << EOF
+          storeFile=$HOME/upload-keystore.p12
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          password=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          EOF
+
+      - name: 构建 Android armv7 APK
+        run: |
+          pnpm tauri android build --target armv7-linux-androideabi
+
+      - name: 重命名 APK
+        run: |
+          VERSION="${{ github.event.inputs.tag_name }}"
+          APK_DIR="src-tauri/gen/android/app/build/outputs/apk/universal/release"
+          ORIGINAL_APK="$APK_DIR/app-universal-release-unsigned.apk"
+
+          if [[ -f "$ORIGINAL_APK" ]]; then
+            NEW_NAME="LingChat-${VERSION}-armv7.apk"
+            mv "$ORIGINAL_APK" "$APK_DIR/$NEW_NAME"
+            echo "APK 已重命名为: $NEW_NAME"
+          else
+            echo "未找到 APK 文件，尝试查找其他路径..."
+            find src-tauri/gen/android -name "*.apk" 2>/dev/null
+          fi
+
+      - name: 手动签名 APK
+        run: |
+          VERSION="${{ github.event.inputs.tag_name }}"
+          APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/LingChat-${VERSION}-armv7.apk"
+
+          # 如果上面路径不存在，尝试查找实际 APK 位置
+          if [[ ! -f "$APK_PATH" ]]; then
+            APK_PATH=$(find src-tauri/gen/android -name "*.apk" 2>/dev/null | head -1)
+            echo "找到 APK: $APK_PATH"
+          fi
+
+          APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner 2>/dev/null | head -1)
+
+          if [[ -n "$APKSIGNER" && -f "$APK_PATH" ]]; then
+            $APKSIGNER sign \
+              --ks $HOME/upload-keystore.p12 \
+              --ks-key-alias ${{ secrets.ANDROID_KEY_ALIAS }} \
+              --ks-pass pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+              --key-pass pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+              "$APK_PATH"
+            echo "✅ APK 签名成功"
+          else
+            echo "⚠️ 未找到 APK 或 apksigner，跳过签名"
+          fi
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+
+      - name: 上传 APK 作为 Artifact（备用）
+        uses: actions/upload-artifact@v4
+        with:
+          name: LingChat-armv7-${{ github.event.inputs.tag_name }}
+          path: |
+            src-tauri/gen/android/**/*.apk
+            !**/*-unsigned.apk
+
+      - name: 创建或更新 Release
+        run: |
+          TAG="${{ github.event.inputs.tag_name }}"
+          APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/LingChat-${TAG}-armv7.apk"
+
+          # 如果上面的路径不存在，查找实际 APK
+          if [[ ! -f "$APK_PATH" ]]; then
+            APK_PATH=$(find src-tauri/gen/android -name "*.apk" ! -name "*-unsigned.apk" 2>/dev/null | head -1)
+          fi
+
+          if [[ -z "$APK_PATH" || ! -f "$APK_PATH" ]]; then
+            echo "❌ 未找到已签名的 APK，跳过 Release 上传"
+            exit 1
+          fi
+
+          if gh release view "$TAG" &>/dev/null; then
+            echo "📦 Release $TAG 已存在，上传 APK..."
+            gh release upload "$TAG" "$APK_PATH" --clobber
+          else
+            echo "✨ 创建新 Release: $TAG"
+
+            CMD="gh release create \"$TAG\" \"$APK_PATH\" --generate-notes"
+
+            if [[ -n "${{ github.event.inputs.release_title }}" ]]; then
+              CMD="$CMD --title \"${{ github.event.inputs.release_title }}\""
+            fi
+
+            if [[ "${{ github.event.inputs.is_prerelease }}" == "true" ]]; then
+              CMD="$CMD --prerelease"
+            fi
+
+            eval $CMD
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
