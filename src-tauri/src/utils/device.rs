@@ -1,3 +1,4 @@
+#![cfg(not(target_os = "android"))]
 //! 推理设备选择工具（供 TTS、情绪识别等 ONNX 推理功能复用）。
 //!
 //! 三个能力：
