@@ -1,3 +1,4 @@
+#![cfg(not(target_os = "android"))]
 //! ASR 相关 Tauri commands。
 //!
 //! 10 个 command：
