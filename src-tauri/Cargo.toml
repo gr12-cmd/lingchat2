@@ -50,9 +50,8 @@ uuid = { version = "1", features = ["v4"] }
 async-trait = "0.1"
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 
-# 关键修改：加上 sbv2_core，并禁用 ort 的自动下载
-sbv2_core = { git = "https://gh-proxy.org/github.com/shadow01a/sbv2-api/", default-features = false, features = ["std"] }
-ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray"] }
+# Android 不需要这些，已移到底部桌面端专用区块
+# sbv2_core 和 ort 只会在桌面端编译
 
 once_cell = "1"
 base64 = "0.22"
@@ -80,9 +79,12 @@ encoding_rs = "0.8"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# sbv2_core 和 ort 只在这里出现，Android/iOS 完全看不见
+sbv2_core = { git = "https://gh-proxy.org/github.com/shadow01a/sbv2-api/", default-features = false, features = ["std"] }
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-# 这里保留桌面端带加速特性的 ort
+# Windows 桌面端用 directml
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["directml"] }
 sbv2_core = { git = "https://gh-proxy.org/github.com/shadow01a/sbv2-api/", default-features = false, features = ["directml"] }
 windows = { version = "0.62.2", features = ["Win32_UI_WindowsAndMessaging", "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Dxgi", "Win32_Security", "Win32_System_Threading"] }
@@ -91,13 +93,13 @@ windows = { version = "0.62.2", features = ["Win32_UI_WindowsAndMessaging", "Win
 wgpu = "26"
 
 [target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
-# 这里保留桌面端带加速特性的 ort
+# Linux 桌面端用 webgpu
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["webgpu"] }
 sbv2_core = { git = "https://gh-proxy.org/github.com/shadow01a/sbv2-api/", default-features = false, features = ["webgpu"] }
 ash = { version = "0.38", default-features = false, features = ["loaded"] }
 
 [target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
-# 这里保留桌面端带加速特性的 ort
+# macOS 桌面端用 coreml
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["coreml"] }
 sbv2_core = { git = "https://gh-proxy.org/github.com/shadow01a/sbv2-api/", default-features = false, features = ["coreml"] }
 
