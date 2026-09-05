@@ -82,9 +82,6 @@ tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 
 ndarray = "0.17"
 
-sbv2_core = { git = "https://gh-proxy.org/github.com/shadow01a/sbv2-api/", default-features = false, features = [
-    "std",
-] }
 once_cell = "1"
 base64 = "0.22"
 rand = "0.8"
