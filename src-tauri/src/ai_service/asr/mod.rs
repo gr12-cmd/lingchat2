@@ -1,6 +1,6 @@
 //! ASR (Automatic Speech Recognition) 服务。
 //!
-//! 端点检测由 [`vad::AsrVad`] 负责（本地 Silero ONNX）；
+//! 端点检测由 [`vad::AsrVad`] 负责（本地 Silero ONNX，仅 Desktop）；
 //! 识别交由 [`provider`] 的云 ASR provider 实现；
 //! 会话编排由 [`session::AsrSession`] 统一管理互斥和取消；
 //! 配置由 [`settings`] 通过 tauri_plugin_store 持久化。
@@ -11,6 +11,7 @@ pub mod provider_stream;
 pub mod provider_stream_llama;
 pub mod session;
 pub mod settings;
+#[cfg(not(target_os = "android"))]
 pub mod vad;
 pub mod vad_segmenter;
 
