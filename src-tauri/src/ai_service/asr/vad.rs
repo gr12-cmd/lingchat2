@@ -4,7 +4,7 @@
 //! 推理出语音概率，喂给 [`vad_segmenter`] 纯状态机做端点切分，
 //! 事件映射为 `asr://*` 事件推送给前端。
 
-#![cfg(not(target_os = "android"))]
+#![cfg(not(any(target_os = "android", target_os = "ios")))]
 
 use std::path::PathBuf;
 use std::sync::Arc;
