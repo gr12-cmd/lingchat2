@@ -1,3 +1,4 @@
+#![cfg_attr(target_os = "android", allow(unused_imports, dead_code, unused_variables))]
 mod achievements;
 mod adventures;
 mod ai_service;
